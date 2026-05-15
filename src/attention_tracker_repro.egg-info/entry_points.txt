@@ -1,0 +1,3 @@
+[console_scripts]
+compare-last-token-attention = last_token_attention.compare_cli:main
+inspect-last-token-attention = last_token_attention.cli:main

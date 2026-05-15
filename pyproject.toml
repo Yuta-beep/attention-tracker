@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "attention-tracker-repro"
+version = "0.1.0"
+description = "Reproduction experiments for last-token attention analysis in prompt injection detection"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "accelerate>=1.1.0",
+  "bitsandbytes>=0.43.0",
+  "matplotlib>=3.8.0",
+  "python-dotenv>=1.2.2",
+  "torch>=2.3.0",
+  "transformers>=4.46.0",
+]
+
+[project.scripts]
+inspect-last-token-attention = "last_token_attention.cli:main"
+compare-last-token-attention = "last_token_attention.compare_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["last_token_attention*"]

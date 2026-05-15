@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/attention_tracker_repro.egg-info/PKG-INFO
+src/attention_tracker_repro.egg-info/SOURCES.txt
+src/attention_tracker_repro.egg-info/dependency_links.txt
+src/attention_tracker_repro.egg-info/entry_points.txt
+src/attention_tracker_repro.egg-info/requires.txt
+src/attention_tracker_repro.egg-info/top_level.txt
+src/last_token_attention/__init__.py
+src/last_token_attention/attention.py
+src/last_token_attention/cli.py
+src/last_token_attention/compare_cli.py
+src/last_token_attention/config.py
+src/last_token_attention/modeling.py
+src/last_token_attention/plots.py
+src/last_token_attention/prompting.py
+src/last_token_attention/token_span.py

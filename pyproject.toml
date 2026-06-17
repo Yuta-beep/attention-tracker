@@ -22,6 +22,7 @@ dependencies = [
 inspect-last-token-attention = "last_token_attention.cli:main"
 compare-last-token-attention = "last_token_attention.compare_cli:main"
 evaluate-focus-scores = "last_token_attention.evaluate_focus_cli:main"
+evaluate-focus-all-models = "last_token_attention.evaluate_batch_cli:main"
 prepare-eval-data = "last_token_attention.prepare_eval_data_cli:main"
 head-generalization = "last_token_attention.head_generalization:main"
 run-all-models = "last_token_attention.batch_cli:main"

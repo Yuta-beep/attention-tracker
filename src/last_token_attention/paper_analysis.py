@@ -36,10 +36,14 @@ def _important_mask(normal: np.ndarray, attack: np.ndarray, k: float) -> np.ndar
     return _candidate_scores(normal, attack, k) > 0.0
 
 
-def _focus_scores(values: np.ndarray, mask: np.ndarray) -> np.ndarray:
+def focus_scores_for_mask(values: np.ndarray, mask: np.ndarray) -> np.ndarray:
     if not mask.any():
         return np.full(values.shape[0], np.nan)
     return values[:, mask].mean(axis=1)
+
+
+def _focus_scores(values: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    return focus_scores_for_mask(values, mask)
 
 
 def _auroc(normal_focus: np.ndarray, attack_focus: np.ndarray) -> float:
@@ -89,6 +93,18 @@ def _ensure(path: Path) -> None:
 
 def _k_label(k: float) -> str:
     return f"{k:.2f}".replace(".", "_")
+
+
+def _heads_from_mask(mask: np.ndarray, candidate_scores: np.ndarray) -> list[dict]:
+    layers, heads = np.where(mask)
+    return [
+        {
+            "layer": int(layer),
+            "head": int(head),
+            "candidate_score": float(candidate_scores[layer, head]),
+        }
+        for layer, head in zip(layers, heads)
+    ]
 
 
 def plot_figure2_head_maps(results: list[dict], path: Path) -> None:
@@ -284,6 +300,9 @@ def plot_k_ablation(normal_cal: np.ndarray, attack_cal: np.ndarray, normal_eval:
 
 
 def generate_k_sweep(
+    results: list[dict],
+    normal_all: np.ndarray,
+    attack_all: np.ndarray,
     normal_cal: np.ndarray,
     attack_cal: np.ndarray,
     normal_eval: np.ndarray,
@@ -292,7 +311,26 @@ def generate_k_sweep(
 ) -> list[dict]:
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = []
+    focus_score_lines = []
+
     for k in K_SWEEP_VALUES:
+        candidate_scores = _candidate_scores(normal_cal, attack_cal, k)
+        mask = candidate_scores > 0.0
+        selected_heads = _heads_from_mask(mask, candidate_scores)
+        selected_heads_name = f"selected_heads_k{_k_label(k)}.json"
+        (output_dir / selected_heads_name).write_text(
+            json.dumps(
+                {
+                    "k": k,
+                    "num_important_heads": len(selected_heads),
+                    "head_proportion": float(mask.mean()),
+                    "heads": selected_heads,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
         plot_figure8_candidate_scores(
             normal_cal,
             attack_cal,
@@ -306,6 +344,8 @@ def generate_k_sweep(
             attack_cal,
             k=k,
         )
+        normal_focus_all = focus_scores_for_mask(normal_all, mask)
+        attack_focus_all = focus_scores_for_mask(attack_all, mask)
         rows.append(
             {
                 "k": k,
@@ -313,18 +353,66 @@ def generate_k_sweep(
                 "head_proportion": focus_metrics["head_proportion"],
                 "auroc": focus_metrics["auroc"],
                 "plot": f"candidate_scores_k{_k_label(k)}.png",
+                "selected_heads": selected_heads_name,
             }
         )
 
+        for index, result in enumerate(results):
+            split = "calibration" if index % 2 == 0 else "evaluation"
+            common = {
+                "k": k,
+                "k_label": f"{k:.2f}",
+                "case_id": result["id"],
+                "split": split,
+                "num_important_heads": int(mask.sum()),
+            }
+            focus_score_lines.append(
+                json.dumps(
+                    {
+                        **common,
+                        "label": "normal",
+                        "focus_score": float(normal_focus_all[index]),
+                    }
+                )
+            )
+            focus_score_lines.append(
+                json.dumps(
+                    {
+                        **common,
+                        "label": "attack",
+                        "focus_score": float(attack_focus_all[index]),
+                    }
+                )
+            )
+
+    (output_dir / "focus_scores.jsonl").write_text(
+        "\n".join(focus_score_lines) + "\n",
+        encoding="utf-8",
+    )
     (output_dir / "k_sweep_metrics.json").write_text(
         json.dumps(rows, indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "head_selection_manifest.json").write_text(
+        json.dumps(
+            {
+                "k_values": K_SWEEP_VALUES,
+                "split_note": "Important heads are selected from even-indexed calibration pairs.",
+                "metrics": rows,
+                "focus_scores": "focus_scores.jsonl",
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
     (output_dir / "README.txt").write_text(
         "K sweep for Figure 8 candidate scores.\n"
         "Each PNG shows candidate_score by layer/head for one k value.\n"
         "Black contours indicate candidate_score > 0, i.e. selected important heads.\n"
-        "k_sweep_metrics.json records selected-head counts, proportions, and AUROC.\n",
+        "k_sweep_metrics.json records selected-head counts, proportions, and AUROC.\n"
+        "selected_heads_k*.json records the selected layer/head indices for one k value.\n"
+        "focus_scores.jsonl records normal/attack focus scores for every case and k.\n"
+        "head_selection_manifest.json is the input for separate evaluation runs.\n",
         encoding="utf-8",
     )
     return rows
@@ -344,7 +432,7 @@ def generate_paper_analysis(results: list[dict], output_dir: Path) -> dict:
     plot_figure2_token_shift(results, output_dir / "02_figure2b_token_shift.png")
     plot_figure3_distributions(results, output_dir / "03_figure3_attack_distributions.png")
     plot_figure8_candidate_scores(normal_cal, attack_cal, output_dir / "04_figure8_candidate_scores_k4.png")
-    k_sweep = generate_k_sweep(normal_cal, attack_cal, normal_eval, attack_eval, output_dir / "k_sweep")
+    k_sweep = generate_k_sweep(results, normal, attack, normal_cal, attack_cal, normal_eval, attack_eval, output_dir / "k_sweep")
     focus_metrics = calculate_focus_metrics(normal_eval, attack_eval, normal_cal, attack_cal)
     k_ablation = calculate_k_ablation(normal_cal, attack_cal, normal_eval, attack_eval)
     focus_metrics_for_json = {

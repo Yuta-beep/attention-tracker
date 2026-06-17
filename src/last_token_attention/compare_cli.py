@@ -262,6 +262,9 @@ def main() -> None:
             "- plots/04_figure8_candidate_scores_k4.png\n"
             "- plots/k_sweep/*.png\n"
             "- plots/k_sweep/k_sweep_metrics.json\n"
+            "- plots/k_sweep/selected_heads_k*.json\n"
+            "- plots/k_sweep/focus_scores.jsonl\n"
+            "- plots/k_sweep/head_selection_manifest.json\n"
             "- plots/paper_metrics.json\n",
             encoding="utf-8",
         )

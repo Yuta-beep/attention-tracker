@@ -8,6 +8,7 @@ import numpy as np
 
 
 PLOT_DPI = 180
+K_SWEEP_VALUES = [1.0 + 0.25 * index for index in range(13)]
 
 
 def _matrices(results: list[dict], key: str) -> np.ndarray:
@@ -84,6 +85,10 @@ def _attack_group(row: dict) -> str:
 
 def _ensure(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _k_label(k: float) -> str:
+    return f"{k:.2f}".replace(".", "_")
 
 
 def plot_figure2_head_maps(results: list[dict], path: Path) -> None:
@@ -278,6 +283,53 @@ def plot_k_ablation(normal_cal: np.ndarray, attack_cal: np.ndarray, normal_eval:
     return rows
 
 
+def generate_k_sweep(
+    normal_cal: np.ndarray,
+    attack_cal: np.ndarray,
+    normal_eval: np.ndarray,
+    attack_eval: np.ndarray,
+    output_dir: Path,
+) -> list[dict]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for k in K_SWEEP_VALUES:
+        plot_figure8_candidate_scores(
+            normal_cal,
+            attack_cal,
+            output_dir / f"candidate_scores_k{_k_label(k)}.png",
+            k=k,
+        )
+        focus_metrics = calculate_focus_metrics(
+            normal_eval,
+            attack_eval,
+            normal_cal,
+            attack_cal,
+            k=k,
+        )
+        rows.append(
+            {
+                "k": k,
+                "num_important_heads": focus_metrics["num_important_heads"],
+                "head_proportion": focus_metrics["head_proportion"],
+                "auroc": focus_metrics["auroc"],
+                "plot": f"candidate_scores_k{_k_label(k)}.png",
+            }
+        )
+
+    (output_dir / "k_sweep_metrics.json").write_text(
+        json.dumps(rows, indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "README.txt").write_text(
+        "K sweep for Figure 8 candidate scores.\n"
+        "Each PNG shows candidate_score by layer/head for one k value.\n"
+        "Black contours indicate candidate_score > 0, i.e. selected important heads.\n"
+        "k_sweep_metrics.json records selected-head counts, proportions, and AUROC.\n",
+        encoding="utf-8",
+    )
+    return rows
+
+
 def generate_paper_analysis(results: list[dict], output_dir: Path) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     normal = _matrices(results, "normal_instruction_scores")
@@ -292,6 +344,7 @@ def generate_paper_analysis(results: list[dict], output_dir: Path) -> dict:
     plot_figure2_token_shift(results, output_dir / "02_figure2b_token_shift.png")
     plot_figure3_distributions(results, output_dir / "03_figure3_attack_distributions.png")
     plot_figure8_candidate_scores(normal_cal, attack_cal, output_dir / "04_figure8_candidate_scores_k4.png")
+    k_sweep = generate_k_sweep(normal_cal, attack_cal, normal_eval, attack_eval, output_dir / "k_sweep")
     focus_metrics = calculate_focus_metrics(normal_eval, attack_eval, normal_cal, attack_cal)
     k_ablation = calculate_k_ablation(normal_cal, attack_cal, normal_eval, attack_eval)
     focus_metrics_for_json = {
@@ -307,6 +360,7 @@ def generate_paper_analysis(results: list[dict], output_dir: Path) -> dict:
         "num_evaluation_pairs": int(len(evaluation_indices)),
         "focus_k4": focus_metrics_for_json,
         "k_ablation": k_ablation,
+        "k_sweep": k_sweep,
         "attack_groups": {name: sum(_attack_group(row) == name for row in results) for name in sorted({_attack_group(row) for row in results})},
     }
     (output_dir / "paper_metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
@@ -315,6 +369,7 @@ def generate_paper_analysis(results: list[dict], output_dir: Path) -> dict:
         "01-02: Figure 2-style distraction effect.\n"
         "03: Figure 3-style attack distribution comparison.\n"
         "04: Figure 8-style candidate score and important-head positions.\n"
+        "k_sweep/: Figure 8 candidate scores for k=1.00..4.00 in 0.25 increments.\n"
         "paper_metrics.json: focus score AUROC and k/head-selection ablation metrics.\n"
         "This prompt-variation dataset is smaller and differs from the paper benchmarks.\n",
         encoding="utf-8",

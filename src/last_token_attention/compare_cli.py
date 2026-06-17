@@ -260,6 +260,8 @@ def main() -> None:
             "- plots/02_figure2b_token_shift.png\n"
             "- plots/03_figure3_attack_distributions.png\n"
             "- plots/04_figure8_candidate_scores_k4.png\n"
+            "- plots/k_sweep/*.png\n"
+            "- plots/k_sweep/k_sweep_metrics.json\n"
             "- plots/paper_metrics.json\n",
             encoding="utf-8",
         )

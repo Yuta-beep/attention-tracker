@@ -1,3 +1,5 @@
 [console_scripts]
 compare-last-token-attention = last_token_attention.compare_cli:main
+head-generalization = last_token_attention.head_generalization:main
 inspect-last-token-attention = last_token_attention.cli:main
+run-all-models = last_token_attention.batch_cli:main

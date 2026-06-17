@@ -3,28 +3,48 @@ import json
 from pathlib import Path
 
 from .attention import extract_last_token_attention_to_spans, sum_attention_scores
-from .config import get_model_config
+from .config import resolve_model_config
 from .modeling import load_model_bundle
+from .paper_analysis import generate_paper_analysis
 from .plots import (
     plot_case_heatmaps,
     plot_case_token_position_heatmaps,
     plot_case_totals,
+    plot_mean_head_distraction,
     plot_summary_totals,
+    plot_top_distracted_heads,
 )
 from .prompting import build_chat_prompt, build_injected_user_text
+from .runs import create_run_dir
 from .token_span import find_token_indices_for_substring
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="qwen2_1.5b")
+    parser.add_argument(
+        "--model",
+        default="qwen2_1.5b",
+        help="Registry key or Hugging Face model id. Use --model-id to pass an explicit id.",
+    )
+    parser.add_argument("--model-id", default="", help="Explicit Hugging Face model id; overrides --model.")
+    parser.add_argument("--torch-dtype", choices=["float16", "bfloat16", "float32"], default="")
+    parser.add_argument("--load-in-4bit", action="store_true")
+    parser.add_argument("--no-chat-template", action="store_true")
+    parser.add_argument("--no-system-role", action="store_true")
     parser.add_argument("--input", default="")
     parser.add_argument("--instruction", default="")
     parser.add_argument("--base-text", default="")
     parser.add_argument("--injection-text", default="")
     parser.add_argument("--separator", default="\n\n")
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--output", default="")
     parser.add_argument("--plot-dir", default="")
+    parser.add_argument(
+        "--detailed-plots",
+        action="store_true",
+        help="Also generate three plots for every individual case.",
+    )
+    parser.add_argument("--output-root", default="outputs")
+    parser.add_argument("--experiment-title", default="compare-last-token-attention")
     return parser.parse_args()
 
 
@@ -87,12 +107,14 @@ def _analyze_case(bundle, config, case: dict) -> dict:
         tokenizer=bundle.tokenizer,
         instruction=case["instruction"],
         user_text=case["normal_text"],
+        uses_chat_template=config.uses_chat_template,
         system_role_supported=config.system_role_supported,
     )
     injected_prompt = build_chat_prompt(
         tokenizer=bundle.tokenizer,
         instruction=case["instruction"],
         user_text=case["injected_text"],
+        uses_chat_template=config.uses_chat_template,
         system_role_supported=config.system_role_supported,
     )
 
@@ -170,39 +192,86 @@ def _build_summary(results: list[dict]) -> dict:
     }
 
 
-def _generate_plots(results: list[dict], plot_dir: str) -> None:
-    plot_root = Path(plot_dir)
-    plot_root.mkdir(parents=True, exist_ok=True)
+def _generate_plots(
+    results: list[dict], plot_dir: Path, detailed_plots: bool = False
+) -> None:
+    generate_paper_analysis(results, plot_dir)
 
-    for case in results:
-        plot_case_heatmaps(case, plot_root / f"{case['id']}_heatmaps.png")
-        plot_case_token_position_heatmaps(case, plot_root / f"{case['id']}_token_positions.png")
-        plot_case_totals(case, plot_root / f"{case['id']}_totals.png")
+    if detailed_plots:
+        detailed_dir = plot_dir / "details"
+        for case in results:
+            case_dir = detailed_dir / case["id"]
+            plot_case_totals(case, case_dir / "attention_totals.png")
+            plot_case_heatmaps(case, case_dir / "head_attention_heatmaps.png")
+            plot_case_token_position_heatmaps(
+                case, case_dir / "token_attention_by_position.png"
+            )
 
-    plot_summary_totals(results, plot_root / "summary_totals.png")
+
+def _resolve_run_path(run_dir: Path, raw_path: str, default_name: str) -> Path:
+    if not raw_path:
+        return run_dir / default_name
+    return run_dir / Path(raw_path).name
+
+
+def _resolve_output_paths(args: argparse.Namespace) -> tuple[Path, Path, Path]:
+    run_dir = create_run_dir(args.output_root, args.experiment_title)
+    output_path = _resolve_run_path(run_dir, args.output, "results.json")
+    plot_dir = _resolve_run_path(run_dir, args.plot_dir, "plots")
+    return output_path, plot_dir, run_dir
 
 
 def main() -> None:
     args = parse_args()
-    config = get_model_config(args.model)
+    output_path, plot_dir, run_dir = _resolve_output_paths(args)
+
+    config = resolve_model_config(
+        args.model_id or args.model,
+        torch_dtype=args.torch_dtype or None,
+        load_in_4bit=True if args.load_in_4bit else None,
+        uses_chat_template=False if args.no_chat_template else None,
+        system_role_supported=False if args.no_system_role else None,
+    )
     bundle = load_model_bundle(config)
     raw_cases = _load_cases(args)
     cases = [_normalize_case(case, args.separator) for case in raw_cases]
     results = [_analyze_case(bundle, config, case) for case in cases]
 
     payload = {
+        "experiment_title": args.experiment_title,
+        "run_dir": str(run_dir) if run_dir else "",
         "model_key": config.key,
         "model_id": config.model_id,
         "summary": _build_summary(results),
         "cases": results,
     }
 
-    output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-    if args.plot_dir:
-        _generate_plots(results, args.plot_dir)
+    if plot_dir is not None:
+        _generate_plots(results, plot_dir, args.detailed_plots)
+
+    if run_dir is not None:
+        (run_dir / "README.txt").write_text(
+            "Generated files:\n"
+            "- results.json\n"
+            "- plots/01_figure2a_head_distraction.png\n"
+            "- plots/02_figure2b_token_shift.png\n"
+            "- plots/03_figure3_attack_distributions.png\n"
+            "- plots/04_figure5_attack_style_generalization.png\n"
+            "- plots/05_figure8_candidate_scores_k4.png\n"
+            "- plots/06_focus_score_and_roc_k4.png\n"
+            "- plots/07_k_ablation.png\n"
+            "- plots/paper_metrics.json\n",
+            encoding="utf-8",
+        )
+
+    print(f"Saved results: {output_path.resolve()}")
+    if plot_dir is not None:
+        print(f"Saved plots: {plot_dir.resolve()}")
+    if run_dir is not None:
+        print(f"Run directory: {run_dir.resolve()}")
 
 
 if __name__ == "__main__":

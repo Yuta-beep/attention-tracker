@@ -1,4 +1,13 @@
-def build_chat_prompt(tokenizer, instruction: str, user_text: str, system_role_supported: bool = True) -> str:
+def build_chat_prompt(
+    tokenizer,
+    instruction: str,
+    user_text: str,
+    uses_chat_template: bool = True,
+    system_role_supported: bool = True,
+) -> str:
+    if not uses_chat_template:
+        return f"Instruction:\n{instruction}\n\nText:\n{user_text}"
+
     if system_role_supported:
         messages = [
             {"role": "system", "content": instruction},

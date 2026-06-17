@@ -259,10 +259,7 @@ def main() -> None:
             "- plots/01_figure2a_head_distraction.png\n"
             "- plots/02_figure2b_token_shift.png\n"
             "- plots/03_figure3_attack_distributions.png\n"
-            "- plots/04_figure5_attack_style_generalization.png\n"
-            "- plots/05_figure8_candidate_scores_k4.png\n"
-            "- plots/06_focus_score_and_roc_k4.png\n"
-            "- plots/07_k_ablation.png\n"
+            "- plots/04_figure8_candidate_scores_k4.png\n"
             "- plots/paper_metrics.json\n",
             encoding="utf-8",
         )

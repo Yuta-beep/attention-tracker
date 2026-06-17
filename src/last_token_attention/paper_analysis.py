@@ -199,10 +199,10 @@ def plot_figure8_candidate_scores(normal_cal: np.ndarray, attack_cal: np.ndarray
 
 
 def plot_focus_roc(normal_eval: np.ndarray, attack_eval: np.ndarray, normal_cal: np.ndarray, attack_cal: np.ndarray, path: Path, k: float = 4.0) -> dict:
-    mask = _important_mask(normal_cal, attack_cal, k)
-    normal_focus = _focus_scores(normal_eval, mask)
-    attack_focus = _focus_scores(attack_eval, mask)
-    auc = _auroc(normal_focus, attack_focus)
+    focus_metrics = calculate_focus_metrics(normal_eval, attack_eval, normal_cal, attack_cal, k)
+    normal_focus = focus_metrics["normal_focus"]
+    attack_focus = focus_metrics["attack_focus"]
+    auc = focus_metrics["auroc"]
     fpr, tpr = _roc_curve(normal_focus, attack_focus)
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
     finite_normal = normal_focus[np.isfinite(normal_focus)]
@@ -227,15 +227,39 @@ def plot_focus_roc(normal_eval: np.ndarray, attack_eval: np.ndarray, normal_cal:
     _ensure(path)
     fig.savefig(path, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close(fig)
-    return {"k": k, "num_important_heads": int(mask.sum()), "head_proportion": float(mask.mean()), "auroc": auc}
+    return {
+        "k": k,
+        "num_important_heads": focus_metrics["num_important_heads"],
+        "head_proportion": focus_metrics["head_proportion"],
+        "auroc": auc,
+    }
 
 
-def plot_k_ablation(normal_cal: np.ndarray, attack_cal: np.ndarray, normal_eval: np.ndarray, attack_eval: np.ndarray, path: Path) -> list[dict]:
+def calculate_focus_metrics(normal_eval: np.ndarray, attack_eval: np.ndarray, normal_cal: np.ndarray, attack_cal: np.ndarray, k: float = 4.0) -> dict:
+    mask = _important_mask(normal_cal, attack_cal, k)
+    normal_focus = _focus_scores(normal_eval, mask)
+    attack_focus = _focus_scores(attack_eval, mask)
+    return {
+        "k": k,
+        "num_important_heads": int(mask.sum()),
+        "head_proportion": float(mask.mean()),
+        "auroc": _auroc(normal_focus, attack_focus),
+        "normal_focus": normal_focus,
+        "attack_focus": attack_focus,
+    }
+
+
+def calculate_k_ablation(normal_cal: np.ndarray, attack_cal: np.ndarray, normal_eval: np.ndarray, attack_eval: np.ndarray) -> list[dict]:
     rows = []
     for k in range(6):
         mask = _important_mask(normal_cal, attack_cal, float(k))
         auc = _auroc(_focus_scores(normal_eval, mask), _focus_scores(attack_eval, mask))
         rows.append({"k": k, "num_important_heads": int(mask.sum()), "head_proportion": float(mask.mean()), "auroc": auc})
+    return rows
+
+
+def plot_k_ablation(normal_cal: np.ndarray, attack_cal: np.ndarray, normal_eval: np.ndarray, attack_eval: np.ndarray, path: Path) -> list[dict]:
+    rows = calculate_k_ablation(normal_cal, attack_cal, normal_eval, attack_eval)
     fig, ax1 = plt.subplots(figsize=(9, 5), constrained_layout=True)
     ks = [row["k"] for row in rows]
     proportions = [row["head_proportion"] * 100 for row in rows]
@@ -267,17 +291,21 @@ def generate_paper_analysis(results: list[dict], output_dir: Path) -> dict:
     plot_figure2_head_maps(results, output_dir / "01_figure2a_head_distraction.png")
     plot_figure2_token_shift(results, output_dir / "02_figure2b_token_shift.png")
     plot_figure3_distributions(results, output_dir / "03_figure3_attack_distributions.png")
-    plot_figure5_group_generalization(results, output_dir / "04_figure5_attack_style_generalization.png")
-    plot_figure8_candidate_scores(normal_cal, attack_cal, output_dir / "05_figure8_candidate_scores_k4.png")
-    focus_metrics = plot_focus_roc(normal_eval, attack_eval, normal_cal, attack_cal, output_dir / "06_focus_score_and_roc_k4.png")
-    k_ablation = plot_k_ablation(normal_cal, attack_cal, normal_eval, attack_eval, output_dir / "07_k_ablation.png")
+    plot_figure8_candidate_scores(normal_cal, attack_cal, output_dir / "04_figure8_candidate_scores_k4.png")
+    focus_metrics = calculate_focus_metrics(normal_eval, attack_eval, normal_cal, attack_cal)
+    k_ablation = calculate_k_ablation(normal_cal, attack_cal, normal_eval, attack_eval)
+    focus_metrics_for_json = {
+        key: value
+        for key, value in focus_metrics.items()
+        if key not in {"normal_focus", "attack_focus"}
+    }
 
     metrics = {
         "method_note": "Important heads are selected on even-indexed pairs and evaluated on odd-indexed pairs.",
         "num_cases": len(results),
         "num_calibration_pairs": int(len(calibration_indices)),
         "num_evaluation_pairs": int(len(evaluation_indices)),
-        "focus_k4": focus_metrics,
+        "focus_k4": focus_metrics_for_json,
         "k_ablation": k_ablation,
         "attack_groups": {name: sum(_attack_group(row) == name for row in results) for name in sorted({_attack_group(row) for row in results})},
     }
@@ -286,10 +314,8 @@ def generate_paper_analysis(results: list[dict], output_dir: Path) -> dict:
         "Paper-style analysis based on Attention Tracker (arXiv:2411.00348).\n"
         "01-02: Figure 2-style distraction effect.\n"
         "03: Figure 3-style attack distribution comparison.\n"
-        "04: Figure 5-style head generalization across attack styles.\n"
-        "05: Figure 8-style candidate score and important-head positions.\n"
-        "06: Focus score distribution and ROC using Equation 3.\n"
-        "07: k/head-selection ablation corresponding to Table 2.\n"
+        "04: Figure 8-style candidate score and important-head positions.\n"
+        "paper_metrics.json: focus score AUROC and k/head-selection ablation metrics.\n"
         "This prompt-variation dataset is smaller and differs from the paper benchmarks.\n",
         encoding="utf-8",
     )

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 
 
 @dataclass
@@ -10,16 +11,27 @@ class TokenSpanResult:
 
 def _find_unique_substring_span(full_text: str, substring: str) -> tuple[int, int]:
     start = full_text.find(substring)
-    if start < 0:
-        raise ValueError("Instruction text was not found in the rendered prompt.")
+    if start >= 0:
+        second = full_text.find(substring, start + 1)
+        if second >= 0:
+            raise ValueError(
+                "Instruction text appears multiple times in the rendered prompt; unique span is required."
+            )
+        return start, start + len(substring)
 
-    second = full_text.find(substring, start + 1)
-    if second >= 0:
+    parts = [re.escape(part) for part in substring.strip().split()]
+    if not parts:
+        raise ValueError("Instruction text was not found in the rendered prompt.")
+    pattern = r"\s+".join(parts)
+    matches = list(re.finditer(pattern, full_text))
+    if not matches:
+        raise ValueError("Instruction text was not found in the rendered prompt.")
+    if len(matches) > 1:
         raise ValueError(
             "Instruction text appears multiple times in the rendered prompt; unique span is required."
         )
-
-    return start, start + len(substring)
+    match = matches[0]
+    return match.start(), match.end()
 
 
 def find_token_indices_for_substring(tokenizer, full_text: str, substring: str) -> TokenSpanResult:

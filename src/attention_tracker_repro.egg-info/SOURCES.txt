@@ -12,9 +12,13 @@ src/last_token_attention/batch_cli.py
 src/last_token_attention/cli.py
 src/last_token_attention/compare_cli.py
 src/last_token_attention/config.py
+src/last_token_attention/evaluate_batch_cli.py
+src/last_token_attention/evaluate_focus_cli.py
 src/last_token_attention/head_generalization.py
 src/last_token_attention/modeling.py
+src/last_token_attention/paper_analysis.py
 src/last_token_attention/plots.py
+src/last_token_attention/prepare_eval_data_cli.py
 src/last_token_attention/prompting.py
 src/last_token_attention/runs.py
 src/last_token_attention/token_span.py

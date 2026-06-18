@@ -237,7 +237,8 @@ def main() -> None:
         "- manifest.json: per-model evaluation command, status, logs, and result paths\n"
         "- logs/*.log: stdout/stderr captured for each model run\n"
         "- */results.json: evaluate_focus_cli output for each successful model\n"
-        "- */focus_scores/focus_metrics.json: per-k AUROC and selected-head counts\n"
+        "- */focus_scores/focus_metrics.json: per-k AUROC, selected-head counts, thresholds, and detection metrics\n"
+        "- */focus_scores/detections.jsonl: thresholded accept/reject decisions for each case and k\n"
         "- model_comparison/focus_model_comparison.json: cross-model focus metrics\n",
         encoding="utf-8",
     )

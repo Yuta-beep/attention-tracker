@@ -52,3 +52,70 @@ Benchmark output is written under:
 ```text
 outputs/<timestamp>_<experiment-title>/ollama_benchmark.json
 ```
+
+## Prompt-injection detector baselines
+
+The paper baselines are implemented separately from Attention Tracker under
+`last_token_attention/baselines/`. Every detector consumes the same JSONL
+cases used by Attention Tracker and writes one continuous `attack_score` for
+the normal and attacked version of every case.
+
+Available detectors:
+
+```text
+protect_ai    Protect AI DeBERTa classifier
+prompt_guard  Meta Prompt Guard classifier
+llm_based     target LLM judges whether the input is safe
+known_answer  target LLM is tested with the HELLO control instruction
+```
+
+Run the trained classifiers:
+
+```bash
+uv run evaluate-protect-ai \
+  --input data.eval.open_prompt_injection.jsonl
+
+uv run evaluate-prompt-guard \
+  --input data.eval.open_prompt_injection.jsonl
+```
+
+Prompt Guard is gated and requires an accepted Hugging Face license and an
+`HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN`.
+
+Run target-LLM-dependent baselines:
+
+```bash
+uv run evaluate-llm-based \
+  --model qwen2_1.5b \
+  --input data.eval.open_prompt_injection.jsonl
+
+uv run evaluate-known-answer \
+  --model qwen2_1.5b \
+  --input data.eval.open_prompt_injection.jsonl
+```
+
+`evaluate-baseline-detector --detector ...` remains available as a common
+orchestration entry point.
+
+Run all paper baselines across the seven Attention Tracker target models:
+
+```bash
+uv run evaluate-all-baselines \
+  --input data.eval.open_prompt_injection.jsonl \
+  --models all \
+  --detectors all \
+  --experiment-title open-prompt-injection-all-baselines
+```
+
+This creates 16 jobs: Protect AI and Prompt Guard once each, plus LLM-based
+and Known-answer for each of the seven target LLMs. Use `--dry-run` to inspect
+the complete execution manifest without loading models.
+
+Each run writes:
+
+```text
+outputs/<timestamp>_<title>/
+  predictions.jsonl
+  metrics.json
+  README.txt
+```

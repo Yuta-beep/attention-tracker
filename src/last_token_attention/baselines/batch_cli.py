@@ -250,9 +250,24 @@ def main() -> None:
         row["returncode"] = completed.returncode
         row["run_dir"] = run_dir
         row["metrics_path"] = str(Path(run_dir) / "metrics.json") if run_dir else ""
-        row["status"] = "success" if completed.returncode == 0 else "failed"
-        if completed.returncode != 0:
-            row["error"] = completed.stdout[-2000:]
+        metrics_exists = bool(row["metrics_path"]) and Path(row["metrics_path"]).exists()
+        row["status"] = (
+            "success"
+            if completed.returncode == 0 and run_dir and metrics_exists
+            else "failed"
+        )
+        if row["status"] == "failed":
+            if completed.returncode == 0 and not run_dir:
+                row["error"] = (
+                    "Child process exited successfully but did not report a run directory."
+                )
+            elif completed.returncode == 0 and not metrics_exists:
+                row["error"] = (
+                    f"Child process did not create expected metrics file: "
+                    f"{row['metrics_path']}"
+                )
+            else:
+                row["error"] = completed.stdout[-2000:]
         write_manifest(manifest_path, manifest)
         if completed.returncode != 0 and args.fail_fast:
             break

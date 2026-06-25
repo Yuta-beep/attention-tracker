@@ -26,3 +26,7 @@ def main() -> None:
     from .cli import main_for_detector
 
     main_for_detector("known_answer")
+
+
+if __name__ == "__main__":
+    main()

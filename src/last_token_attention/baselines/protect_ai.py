@@ -24,3 +24,7 @@ def main() -> None:
     from .cli import main_for_detector
 
     main_for_detector("protect_ai")
+
+
+if __name__ == "__main__":
+    main()

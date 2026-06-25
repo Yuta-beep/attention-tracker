@@ -25,3 +25,7 @@ def main() -> None:
     from .cli import main_for_detector
 
     main_for_detector("llm_based")
+
+
+if __name__ == "__main__":
+    main()

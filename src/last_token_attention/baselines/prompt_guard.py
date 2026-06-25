@@ -31,3 +31,7 @@ def main() -> None:
     from .cli import main_for_detector
 
     main_for_detector("prompt_guard")
+
+
+if __name__ == "__main__":
+    main()

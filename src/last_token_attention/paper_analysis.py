@@ -25,10 +25,10 @@ def _split_indices(count: int) -> tuple[np.ndarray, np.ndarray]:
 
 def _candidate_scores(normal: np.ndarray, attack: np.ndarray, k: float) -> np.ndarray:
     return (
-        normal.mean(axis=0)
-        - k * normal.std(axis=0)
-        - attack.mean(axis=0)
-        - k * attack.std(axis=0)
+        np.nanmean(normal, axis=0)
+        - k * np.nanstd(normal, axis=0)
+        - np.nanmean(attack, axis=0)
+        - k * np.nanstd(attack, axis=0)
     )
 
 
@@ -108,11 +108,11 @@ def _heads_from_mask(mask: np.ndarray, candidate_scores: np.ndarray) -> list[dic
 
 
 def plot_figure2_head_maps(results: list[dict], path: Path) -> None:
-    normal = _matrices(results, "normal_instruction_scores").mean(axis=0)
-    attack = _matrices(results, "attack_instruction_scores").mean(axis=0)
+    normal = np.nanmean(_matrices(results, "normal_instruction_scores"), axis=0)
+    attack = np.nanmean(_matrices(results, "attack_instruction_scores"), axis=0)
     delta = normal - attack
-    vmax = max(float(normal.max()), float(attack.max())) or 1.0
-    dmax = float(np.abs(delta).max()) or 1.0
+    vmax = max(float(np.nanmax(normal)), float(np.nanmax(attack))) or 1.0
+    dmax = float(np.nanmax(np.abs(delta))) or 1.0
     fig, axes = plt.subplots(1, 3, figsize=(17, 5), constrained_layout=True)
     panels = [
         (normal, "Normal: last token -> original instruction", "YlGnBu", 0.0, vmax),
@@ -135,7 +135,7 @@ def plot_figure2_token_shift(results: list[dict], path: Path) -> None:
     row = max(results, key=lambda item: -item["instruction_total_delta"])
     normal = np.asarray(row["normal_token_scores"], dtype=float)
     attack = np.asarray(row["injected_token_scores"], dtype=float)
-    vmax = max(float(normal.max()), float(attack.max())) or 1.0
+    vmax = max(float(np.nanmax(normal)), float(np.nanmax(attack))) or 1.0
     fig, axes = plt.subplots(2, 1, figsize=(17, 9), constrained_layout=True)
     panels = [
         (axes[0], normal, row["normal_token_texts"], row["instruction_token_indices_normal"], [], "Normal"),
@@ -188,8 +188,8 @@ def plot_figure5_group_generalization(results: list[dict], path: Path) -> None:
         delta = np.asarray(row["normal_instruction_scores"], dtype=float) - np.asarray(row["attack_instruction_scores"], dtype=float)
         grouped.setdefault(_attack_group(row), []).append(delta)
     names = sorted(grouped)
-    matrices = [np.mean(np.stack(grouped[name]), axis=0) for name in names]
-    vmax = max(float(np.abs(matrix).max()) for matrix in matrices) or 1.0
+    matrices = [np.nanmean(np.stack(grouped[name]), axis=0) for name in names]
+    vmax = max(float(np.nanmax(np.abs(matrix))) for matrix in matrices) or 1.0
     fig, axes = plt.subplots(1, len(names), figsize=(5 * len(names), 5), constrained_layout=True)
     axes = np.atleast_1d(axes)
     for ax, name, matrix in zip(axes, names, matrices):
@@ -206,7 +206,7 @@ def plot_figure5_group_generalization(results: list[dict], path: Path) -> None:
 
 def plot_figure8_candidate_scores(normal_cal: np.ndarray, attack_cal: np.ndarray, path: Path, k: float = 4.0) -> None:
     score = _candidate_scores(normal_cal, attack_cal, k)
-    vmax = float(np.abs(score).max()) or 1.0
+    vmax = float(np.nanmax(np.abs(score))) or 1.0
     fig, ax = plt.subplots(figsize=(11, 7), constrained_layout=True)
     im = ax.imshow(score, aspect="auto", cmap="coolwarm", vmin=-vmax, vmax=vmax)
     ax.contour(score > 0.0, levels=[0.5], colors="black", linewidths=0.5)

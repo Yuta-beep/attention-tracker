@@ -109,6 +109,7 @@ def _analyze_case(bundle, config, case: dict) -> dict:
         user_text=case["normal_text"],
         uses_chat_template=config.uses_chat_template,
         system_role_supported=config.system_role_supported,
+        reasoning_enabled=config.reasoning_enabled,
     )
     injected_prompt = build_chat_prompt(
         tokenizer=bundle.tokenizer,
@@ -116,6 +117,7 @@ def _analyze_case(bundle, config, case: dict) -> dict:
         user_text=case["injected_text"],
         uses_chat_template=config.uses_chat_template,
         system_role_supported=config.system_role_supported,
+        reasoning_enabled=config.reasoning_enabled,
     )
 
     instruction_span_normal = find_token_indices_for_substring(
@@ -161,6 +163,7 @@ def _analyze_case(bundle, config, case: dict) -> dict:
         "instruction_token_indices_normal": normal_result.span_token_indices["instruction"],
         "instruction_token_indices_injected": injected_result.span_token_indices["instruction"],
         "injection_token_indices": injected_result.span_token_indices["injection"],
+        "active_attention_layers": normal_result.active_layer_indices,
         "normal_instruction_total": sum_attention_scores(normal_instruction),
         "attack_instruction_total": sum_attention_scores(attack_instruction),
         "attack_injection_total": sum_attention_scores(attack_injection),

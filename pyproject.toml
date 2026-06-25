@@ -33,6 +33,7 @@ evaluate-prompt-guard = "last_token_attention.baselines.prompt_guard:main"
 evaluate-llm-based = "last_token_attention.baselines.llm_based:main"
 evaluate-known-answer = "last_token_attention.baselines.known_answer:main"
 evaluate-all-baselines = "last_token_attention.baselines.batch_cli:main"
+extract-reasoning-attention = "last_token_attention.reasoning_attention_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -11,10 +11,9 @@ Transformers-based attention extraction experiments:
 | `gemma4_12b` | `gemma4:12b` | 32768 | Independent multimodal reasoning comparison |
 | `gpt_oss_20b` | `gpt-oss:20b` | 16384 | Reasoning, structured output, coding, and tools |
 
-These models are not added to `MODEL_REGISTRY`. Qwen 3.5 mixes linear and
-full attention, Gemma 4 requires a newer multimodal model implementation, and
-gpt-oss uses MXFP4 MoE weights. Ollama also does not expose the per-head
-attention tensors required by Attention Tracker.
+Ollama does not expose the per-head attention tensors required by Attention
+Tracker. The same model families also have separate official Transformers
+entries in `MODEL_REGISTRY` for attention extraction.
 
 After pulling this repository on the GPU server:
 
@@ -62,6 +61,43 @@ outputs/<timestamp>_<experiment-title>/
 content, token counts, load time, and generation speed for every case. Ollama
 does not expose per-head attention, so this evaluates behavior on the same
 prompts but does not perform important-head discovery.
+
+## Reasoning-model attention extraction
+
+The official Transformers checkpoints are:
+
+```text
+qwen3.5_9b  -> Qwen/Qwen3.5-9B
+gemma4_12b  -> google/gemma-4-12B-it
+gpt_oss_20b -> openai/gpt-oss-20b
+```
+
+Reasoning is enabled in each model's chat template. Qwen 3.5 and GPT-OSS use
+hybrid attention, so only checkpoint layers marked `full_attention` are used
+for Attention Tracker scores. Original layer indices are retained.
+
+Run conventional pre-generation Attention Tracker analysis:
+
+```bash
+uv run compare-last-token-attention \
+  --model qwen3.5_9b \
+  --input data.head_finding.practical_30.jsonl \
+  --experiment-title qwen3.5-reasoning-head-finding
+```
+
+Save attention for every generated reasoning token separately:
+
+```bash
+uv run extract-reasoning-attention \
+  --model qwen3.5_9b \
+  --input data.head_finding.practical_30.jsonl \
+  --max-new-tokens 256 \
+  --limit 1 \
+  --experiment-title qwen3.5-generated-reasoning-attention
+```
+
+This writes a JSONL summary and `.pt` tensors shaped as generated token ×
+original layer × attention head.
 
 ## Prompt-injection detector baselines
 

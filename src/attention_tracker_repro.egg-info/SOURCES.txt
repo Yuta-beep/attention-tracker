@@ -22,6 +22,7 @@ src/last_token_attention/paper_analysis.py
 src/last_token_attention/plots.py
 src/last_token_attention/prepare_eval_data_cli.py
 src/last_token_attention/prompting.py
+src/last_token_attention/reasoning_attention_cli.py
 src/last_token_attention/runs.py
 src/last_token_attention/token_span.py
 src/last_token_attention/baselines/__init__.py
@@ -39,4 +40,6 @@ tests/test_baseline_batch.py
 tests/test_baseline_classifiers.py
 tests/test_baseline_common.py
 tests/test_baseline_metrics.py
+tests/test_baseline_module_entrypoints.py
 tests/test_ollama_models.py
+tests/test_reasoning_model_configs.py

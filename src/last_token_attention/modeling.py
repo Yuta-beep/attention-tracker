@@ -3,7 +3,13 @@ import os
 
 from dotenv import load_dotenv
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoModelForImageTextToText,
+    AutoModelForMultimodalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+)
 
 from .config import ModelConfig
 
@@ -13,6 +19,7 @@ class ModelBundle:
     tokenizer: AutoTokenizer
     model: AutoModelForCausalLM
     device: torch.device
+    config: ModelConfig
 
 
 def _resolve_torch_dtype(dtype_name: str) -> torch.dtype:
@@ -34,7 +41,10 @@ def _resolve_hf_token() -> str | None:
 
 def load_model_bundle(config: ModelConfig) -> ModelBundle:
     hf_token = _resolve_hf_token()
-    tokenizer_kwargs = {"use_fast": True}
+    tokenizer_kwargs = {
+        "use_fast": True,
+        "trust_remote_code": config.trust_remote_code,
+    }
     if hf_token:
         tokenizer_kwargs["token"] = hf_token
 
@@ -46,7 +56,10 @@ def load_model_bundle(config: ModelConfig) -> ModelBundle:
     model_kwargs = {
         "device_map": "auto",
         "output_attentions": True,
+        "trust_remote_code": config.trust_remote_code,
     }
+    if config.attn_implementation:
+        model_kwargs["attn_implementation"] = config.attn_implementation
     if hf_token:
         model_kwargs["token"] = hf_token
 
@@ -58,8 +71,17 @@ def load_model_bundle(config: ModelConfig) -> ModelBundle:
     else:
         model_kwargs["torch_dtype"] = torch_dtype
 
-    model = AutoModelForCausalLM.from_pretrained(config.model_id, **model_kwargs)
+    loaders = {
+        "causal_lm": AutoModelForCausalLM,
+        "image_text_to_text": AutoModelForImageTextToText,
+        "multimodal_lm": AutoModelForMultimodalLM,
+    }
+    try:
+        loader = loaders[config.model_loader]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported model_loader={config.model_loader!r}") from exc
+    model = loader.from_pretrained(config.model_id, **model_kwargs)
     model.eval()
 
     device = next(model.parameters()).device
-    return ModelBundle(tokenizer=tokenizer, model=model, device=device)
+    return ModelBundle(tokenizer=tokenizer, model=model, device=device, config=config)

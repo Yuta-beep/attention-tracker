@@ -8,6 +8,7 @@ evaluate-known-answer = last_token_attention.baselines.known_answer:main
 evaluate-llm-based = last_token_attention.baselines.llm_based:main
 evaluate-prompt-guard = last_token_attention.baselines.prompt_guard:main
 evaluate-protect-ai = last_token_attention.baselines.protect_ai:main
+extract-reasoning-attention = last_token_attention.reasoning_attention_cli:main
 head-generalization = last_token_attention.head_generalization:main
 inspect-last-token-attention = last_token_attention.cli:main
 manage-ollama-models = last_token_attention.ollama_cli:main

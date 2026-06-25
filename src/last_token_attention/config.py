@@ -10,6 +10,11 @@ class ModelConfig:
     system_role_supported: bool = True
     load_in_4bit: bool = False
     torch_dtype: str = "bfloat16"
+    model_loader: str = "causal_lm"
+    trust_remote_code: bool = False
+    attn_implementation: str = ""
+    reasoning_enabled: bool = False
+    attention_layer_type: str = ""
 
 
 MODEL_REGISTRY = {
@@ -68,6 +73,45 @@ MODEL_REGISTRY = {
         system_role_supported=False,
         load_in_4bit=True,
         torch_dtype="bfloat16",
+    ),
+    "qwen3.5_9b": ModelConfig(
+        key="qwen3.5_9b",
+        model_id="Qwen/Qwen3.5-9B",
+        uses_chat_template=True,
+        system_role_supported=True,
+        load_in_4bit=True,
+        torch_dtype="bfloat16",
+        model_loader="image_text_to_text",
+        trust_remote_code=True,
+        attn_implementation="eager",
+        reasoning_enabled=True,
+        attention_layer_type="full_attention",
+    ),
+    "gemma4_12b": ModelConfig(
+        key="gemma4_12b",
+        model_id="google/gemma-4-12B-it",
+        uses_chat_template=True,
+        system_role_supported=True,
+        load_in_4bit=True,
+        torch_dtype="bfloat16",
+        model_loader="multimodal_lm",
+        trust_remote_code=True,
+        attn_implementation="eager",
+        reasoning_enabled=True,
+        attention_layer_type="full_attention",
+    ),
+    "gpt_oss_20b": ModelConfig(
+        key="gpt_oss_20b",
+        model_id="openai/gpt-oss-20b",
+        uses_chat_template=True,
+        system_role_supported=True,
+        load_in_4bit=False,
+        torch_dtype="bfloat16",
+        model_loader="causal_lm",
+        trust_remote_code=True,
+        attn_implementation="eager",
+        reasoning_enabled=True,
+        attention_layer_type="full_attention",
     ),
 }
 

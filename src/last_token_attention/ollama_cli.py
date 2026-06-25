@@ -15,6 +15,7 @@ DEFAULT_PROMPT = (
     "Explain how transformer attention helps a language model use context. "
     "Answer in one concise paragraph."
 )
+DEFAULT_INPUT = "data.head_finding.practical_30.jsonl"
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,7 +29,21 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated registry keys/model tags, or 'all'.",
     )
     parser.add_argument("--host", default="http://127.0.0.1:11434")
+    parser.add_argument(
+        "--input",
+        default=DEFAULT_INPUT,
+        help=(
+            "Attention Tracker JSONL cases. Each case is run as a normal/attack "
+            "pair. Pass an empty string to use --prompt instead."
+        ),
+    )
     parser.add_argument("--prompt", default=DEFAULT_PROMPT)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Optional maximum number of JSONL cases for a smoke test.",
+    )
     parser.add_argument("--num-predict", type=int, default=128)
     parser.add_argument(
         "--num-ctx",
@@ -109,34 +124,37 @@ def _tokens_per_second(count: int | None, duration_ns: int | None) -> float | No
     return float(count / (duration_ns / 1_000_000_000))
 
 
-def _benchmark_model(
-    host: str,
-    config: OllamaModelConfig,
-    args: argparse.Namespace,
-) -> dict:
-    context = args.num_ctx or config.default_context
-    payload = {
-        "model": config.model,
-        "prompt": args.prompt,
-        "stream": False,
-        "think": args.think,
-        "keep_alive": args.keep_alive,
-        "options": {
-            "temperature": args.temperature,
-            "num_predict": args.num_predict,
-            "num_ctx": context,
-        },
-    }
-    started = time.perf_counter()
-    response = _request_json(host, "/api/generate", payload=payload)
-    wall_seconds = time.perf_counter() - started
+def _load_cases(input_path: str, limit: int = 0) -> list[dict]:
+    cases = []
+    for line_number, line in enumerate(
+        Path(input_path).read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        missing = {
+            key
+            for key in ("instruction", "normal_text", "injected_text")
+            if key not in row
+        }
+        if missing:
+            raise ValueError(
+                f"{input_path}:{line_number} is missing fields: "
+                + ", ".join(sorted(missing))
+            )
+        cases.append(row)
+        if limit and len(cases) >= limit:
+            break
+    if not cases:
+        raise ValueError(f"No cases found in {input_path}.")
+    return cases
+
+
+def _response_metrics(response: dict) -> dict:
+    message = response.get("message", {})
     return {
-        "model_key": config.key,
-        "model": config.model,
-        "role": config.role,
-        "context": context,
-        "thinking_enabled": args.think,
-        "wall_seconds": wall_seconds,
+        "wall_seconds": response["_wall_seconds"],
         "load_seconds": response.get("load_duration", 0) / 1_000_000_000,
         "prompt_tokens": response.get("prompt_eval_count"),
         "prompt_tokens_per_second": _tokens_per_second(
@@ -149,9 +167,71 @@ def _benchmark_model(
             response.get("eval_duration"),
         ),
         "done_reason": response.get("done_reason"),
-        "response": response.get("response", ""),
-        "thinking": response.get("thinking", ""),
+        "response": message.get("content", response.get("response", "")),
+        "thinking": message.get("thinking", response.get("thinking", "")),
     }
+
+
+def _run_chat(
+    host: str,
+    config: OllamaModelConfig,
+    args: argparse.Namespace,
+    instruction: str,
+    user_text: str,
+) -> dict:
+    context = args.num_ctx or config.default_context
+    payload = {
+        "model": config.model,
+        "messages": [
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": user_text},
+        ],
+        "stream": False,
+        "think": args.think,
+        "keep_alive": args.keep_alive,
+        "options": {
+            "temperature": args.temperature,
+            "num_predict": args.num_predict,
+            "num_ctx": context,
+        },
+    }
+    started = time.perf_counter()
+    response = _request_json(host, "/api/chat", payload=payload)
+    response["_wall_seconds"] = time.perf_counter() - started
+    return {
+        "model_key": config.key,
+        "model": config.model,
+        "role": config.role,
+        "context": context,
+        "thinking_enabled": args.think,
+        **_response_metrics(response),
+    }
+
+
+def _mean_finite(rows: list[dict], key: str) -> float | None:
+    values = [row[key] for row in rows if row.get(key) is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _summarize_results(results: list[dict]) -> list[dict]:
+    summaries = []
+    model_names = list(dict.fromkeys(row["model"] for row in results))
+    for model in model_names:
+        model_rows = [row for row in results if row["model"] == model]
+        summaries.append(
+            {
+                "model": model,
+                "num_inferences": len(model_rows),
+                "mean_wall_seconds": _mean_finite(model_rows, "wall_seconds"),
+                "mean_prompt_tokens_per_second": _mean_finite(
+                    model_rows, "prompt_tokens_per_second"
+                ),
+                "mean_generation_tokens_per_second": _mean_finite(
+                    model_rows, "generation_tokens_per_second"
+                ),
+            }
+        )
+    return summaries
 
 
 def _run_benchmark(
@@ -168,15 +248,50 @@ def _run_benchmark(
             + ". Run `manage-ollama-models pull --models all` first."
         )
 
+    cases = _load_cases(args.input, args.limit) if args.input else []
+    if not cases:
+        cases = [
+            {
+                "id": "single-prompt",
+                "instruction": "Follow the user's request.",
+                "normal_text": args.prompt,
+                "injected_text": args.prompt,
+            }
+        ]
+
     run_dir = create_run_dir(args.output_root, args.experiment_title)
+    predictions_path = run_dir / "ollama_predictions.jsonl"
     results = []
-    for index, config in enumerate(models, start=1):
-        print(f"[{index}/{len(models)}] Benchmarking {config.model}", flush=True)
-        result = _benchmark_model(host, config, args)
-        results.append(result)
-        speed = result["generation_tokens_per_second"]
-        speed_text = f"{speed:.2f} tok/s" if speed is not None else "N/A"
-        print(f"[{index}/{len(models)}] {config.model}: {speed_text}", flush=True)
+    total = len(models) * len(cases) * 2
+    completed = 0
+    for config in models:
+        for case in cases:
+            for label, field in (("normal", "normal_text"), ("attack", "injected_text")):
+                completed += 1
+                case_id = case.get("id", f"case-{completed:04d}")
+                print(
+                    f"[{completed}/{total}] {config.model} {case_id} {label}",
+                    flush=True,
+                )
+                result = {
+                    "case_id": case_id,
+                    "label": label,
+                    "instruction": case["instruction"],
+                    "user_text": case[field],
+                    "source_dataset": case.get("source_dataset"),
+                    "target_task": case.get("target_task"),
+                    "attack": case.get("attack"),
+                    **_run_chat(
+                        host,
+                        config,
+                        args,
+                        case["instruction"],
+                        case[field],
+                    ),
+                }
+                results.append(result)
+                with predictions_path.open("a", encoding="utf-8") as output:
+                    output.write(json.dumps(result, ensure_ascii=False) + "\n")
 
     output_path = run_dir / "ollama_benchmark.json"
     output_path.write_text(
@@ -184,11 +299,14 @@ def _run_benchmark(
             {
                 "created_at": datetime.now().isoformat(timespec="seconds"),
                 "host": host,
-                "prompt": args.prompt,
+                "input": args.input,
+                "num_cases": len(cases),
                 "num_predict": args.num_predict,
                 "temperature": args.temperature,
                 "thinking_enabled": args.think,
-                "results": results,
+                "models": [config.model for config in models],
+                "summary": _summarize_results(results),
+                "predictions": predictions_path.name,
             },
             indent=2,
             ensure_ascii=False,

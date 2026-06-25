@@ -27,31 +27,41 @@ cd ~/Developer/attention-tracker
 ~/.local/bin/uv run manage-ollama-models pull --models all
 ```
 
-Run the same short non-thinking benchmark across all three models:
+Run the same 30 normal/attack prompt pairs used for practical important-head
+discovery across all three models:
 
 ```bash
 ~/.local/bin/uv run manage-ollama-models benchmark \
   --models all \
-  --num-predict 128 \
-  --experiment-title recommended-models-non-thinking
+  --input data.head_finding.practical_30.jsonl \
+  --num-predict 256 \
+  --experiment-title practical-30-new-models
 ```
 
-Run a reasoning benchmark:
+This executes 180 generations: 30 cases x normal/attack x 3 models. Run a
+one-case smoke test first when needed:
 
 ```bash
 ~/.local/bin/uv run manage-ollama-models benchmark \
   --models all \
-  --think \
-  --num-predict 512 \
-  --prompt "Solve the problem carefully and verify the result: ..." \
-  --experiment-title recommended-models-thinking
+  --input data.head_finding.practical_30.jsonl \
+  --limit 1 \
+  --num-predict 128 \
+  --experiment-title practical-30-smoke-test
 ```
 
 Benchmark output is written under:
 
 ```text
-outputs/<timestamp>_<experiment-title>/ollama_benchmark.json
+outputs/<timestamp>_<experiment-title>/
+  ollama_benchmark.json
+  ollama_predictions.jsonl
 ```
+
+`ollama_predictions.jsonl` contains the normal and attack responses, thinking
+content, token counts, load time, and generation speed for every case. Ollama
+does not expose per-head attention, so this evaluates behavior on the same
+prompts but does not perform important-head discovery.
 
 ## Prompt-injection detector baselines
 

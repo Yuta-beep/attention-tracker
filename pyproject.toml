@@ -26,6 +26,7 @@ evaluate-focus-all-models = "last_token_attention.evaluate_batch_cli:main"
 prepare-eval-data = "last_token_attention.prepare_eval_data_cli:main"
 head-generalization = "last_token_attention.head_generalization:main"
 run-all-models = "last_token_attention.batch_cli:main"
+manage-ollama-models = "last_token_attention.ollama_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
